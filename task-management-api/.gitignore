@@ -46,6 +46,13 @@ jspm_packages/
 # dotenv environment variables file
 .env
 
+# TypeScript build output
+dist/
+build/
+
+# TypeScript declaration files
+*.d.ts.map
+
 # IDE files
 .vscode/
 .idea/

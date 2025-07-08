@@ -1,10 +1,11 @@
-const express = require('express');
-const cors = require('cors');
-const helmet = require('helmet');
-const morgan = require('morgan');
-const { MongoClient, ObjectId } = require('mongodb');
-const config = require('./config');
-require('dotenv').config();
+import express, { Request, Response } from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import morgan from 'morgan';
+import { MongoClient, Db, Collection } from 'mongodb';
+import config from './config';
+import { Task, CreateTaskRequest, UpdateTaskRequest, HealthResponse } from './types';
+import 'dotenv/config';
 
 const app = express();
 const PORT = config.port;
@@ -25,16 +26,16 @@ console.log('Config values:');
 console.log('config.mongodbUri:', config.mongodbUri);
 console.log('MONGODB_URI:', MONGODB_URI);
 
-let db;
+let db: Db;
 
-async function connectToMongo() {
+async function connectToMongo(): Promise<void> {
   const maxRetries = 30;
   const retryDelay = 2000; // 2 seconds
   
   // Debug: Log environment variables
   console.log('Environment variables:');
-  console.log('MONGODB_URI:', process.env.MONGODB_URI);
-  console.log('CONNECTIONSTRINGS__TASKDB:', process.env.CONNECTIONSTRINGS__TASKDB);
+  console.log('MONGODB_URI:', process.env['MONGODB_URI']);
+  console.log('CONNECTIONSTRINGS__TASKDB:', process.env['CONNECTIONSTRINGS__TASKDB']);
   console.log('Final connection string:', MONGODB_URI);
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -47,7 +48,7 @@ async function connectToMongo() {
       console.log('Connected to MongoDB successfully');
       return;
     } catch (error) {
-      console.error(`MongoDB connection attempt ${attempt} failed:`, error.message);
+      console.error(`MongoDB connection attempt ${attempt} failed:`, (error as Error).message);
       
       if (attempt === maxRetries) {
         console.error('Max retries reached. Exiting...');
@@ -61,9 +62,16 @@ async function connectToMongo() {
 }
 
 // Task model
-class TaskItem {
-  constructor(title, description, isCompleted = false, dueDate = null) {
-    this.id = new ObjectId().toString();
+class TaskItem implements Task {
+  id: string;
+  title: string;
+  description: string;
+  isCompleted: boolean;
+  createdDate: string;
+  dueDate?: string | null;
+
+  constructor(title: string, description: string, isCompleted: boolean = false, dueDate: string | null = null) {
+    this.id = new Date().getTime().toString() + Math.random().toString(36).substr(2, 9);
     this.title = title;
     this.description = description;
     this.isCompleted = isCompleted;
@@ -73,9 +81,9 @@ class TaskItem {
 }
 
 // Routes
-app.get('/tasks', async (req, res) => {
+app.get('/tasks', async (_req: Request, res: Response): Promise<void> => {
   try {
-    const collection = db.collection(COLLECTION_NAME);
+    const collection: Collection<Task> = db.collection(COLLECTION_NAME);
     const tasks = await collection.find({}).toArray();
     res.json(tasks);
   } catch (error) {
@@ -84,13 +92,21 @@ app.get('/tasks', async (req, res) => {
   }
 });
 
-app.get('/tasks/:id', async (req, res) => {
+app.get('/tasks/:id', async (req: Request, res: Response): Promise<void> => {
   try {
-    const collection = db.collection(COLLECTION_NAME);
-    const task = await collection.findOne({ id: req.params.id });
+    const collection: Collection<Task> = db.collection(COLLECTION_NAME);
+    const taskId = req.params['id'];
+    
+    if (!taskId) {
+      res.status(400).json({ error: 'Task ID is required' });
+      return;
+    }
+    
+    const task = await collection.findOne({ id: taskId });
     
     if (!task) {
-      return res.status(404).json({ error: 'Task not found' });
+      res.status(404).json({ error: 'Task not found' });
+      return;
     }
     
     res.json(task);
@@ -100,18 +116,19 @@ app.get('/tasks/:id', async (req, res) => {
   }
 });
 
-app.post('/tasks', async (req, res) => {
+app.post('/tasks', async (req: Request<{}, {}, CreateTaskRequest>, res: Response): Promise<void> => {
   try {
     console.log('Received task:', req.body);
     
     const { title, description, isCompleted, dueDate } = req.body;
     
     if (!title || !description) {
-      return res.status(400).json({ error: 'Title and description are required' });
+      res.status(400).json({ error: 'Title and description are required' });
+      return;
     }
     
-    const task = new TaskItem(title, description, isCompleted, dueDate);
-    const collection = db.collection(COLLECTION_NAME);
+    const task = new TaskItem(title, description, isCompleted || false, dueDate);
+    const collection: Collection<Task> = db.collection(COLLECTION_NAME);
     
     await collection.insertOne(task);
     
@@ -119,20 +136,21 @@ app.post('/tasks', async (req, res) => {
     res.status(201).json(task);
   } catch (error) {
     console.error('Error creating task:', error);
-    res.status(500).json({ error: 'Failed to create task', details: error.message });
+    res.status(500).json({ error: 'Failed to create task', details: (error as Error).message });
   }
 });
 
-app.put('/tasks/:id', async (req, res) => {
+app.put('/tasks/:id', async (req: Request<{ id: string }, {}, UpdateTaskRequest>, res: Response): Promise<void> => {
   try {
-    const collection = db.collection(COLLECTION_NAME);
+    const collection: Collection<Task> = db.collection(COLLECTION_NAME);
     const existingTask = await collection.findOne({ id: req.params.id });
     
     if (!existingTask) {
-      return res.status(404).json({ error: 'Task not found' });
+      res.status(404).json({ error: 'Task not found' });
+      return;
     }
     
-    const updatedTask = { ...req.body, id: req.params.id };
+    const updatedTask: Task = { ...existingTask, ...req.body, id: req.params.id };
     await collection.replaceOne({ id: req.params.id }, updatedTask);
     
     res.status(204).send();
@@ -142,13 +160,14 @@ app.put('/tasks/:id', async (req, res) => {
   }
 });
 
-app.delete('/tasks/:id', async (req, res) => {
+app.delete('/tasks/:id', async (req: Request<{ id: string }>, res: Response): Promise<void> => {
   try {
-    const collection = db.collection(COLLECTION_NAME);
+    const collection: Collection<Task> = db.collection(COLLECTION_NAME);
     const existingTask = await collection.findOne({ id: req.params.id });
     
     if (!existingTask) {
-      return res.status(404).json({ error: 'Task not found' });
+      res.status(404).json({ error: 'Task not found' });
+      return;
     }
     
     await collection.deleteOne({ id: req.params.id });
@@ -160,12 +179,12 @@ app.delete('/tasks/:id', async (req, res) => {
 });
 
 // Health check endpoint
-app.get('/health', (req, res) => {
+app.get('/health', (_req: Request, res: Response<HealthResponse>): void => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
 // Start server
-async function startServer() {
+async function startServer(): Promise<void> {
   await connectToMongo();
   
   app.listen(PORT, () => {

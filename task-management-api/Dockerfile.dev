@@ -14,5 +14,5 @@ COPY . .
 # Expose port
 EXPOSE 5469
 
-# Start with nodemon for development
+# Start with ts-node-dev for TypeScript development
 CMD ["npm", "run", "dev"] 
