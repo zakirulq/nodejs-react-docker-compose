@@ -64,7 +64,7 @@ Before running this project, ensure you have the following installed:
 
 ```bash
 git clone <repository-url>
-cd AspireNodeReact
+cd NodeWithReactInDockerCompose
 ```
 
 ### 2. Start the Application
@@ -190,12 +190,12 @@ The Node.js API provides the following endpoints:
 ## 🏗️ Project Structure
 
 ```
-AspireNodeReact/
+NodeWithReactInDockerCompose/
 ├── docker-compose.yml              # Docker Compose configuration
 ├── task-management-api/            # Node.js API
 │   ├── Dockerfile                  # API container configuration
-│   ├── server.js                   # Express server
-│   ├── config.js                   # Configuration
+│   ├── src/server.ts               # Express server (TypeScript)
+│   ├── src/config.ts               # Configuration (TypeScript)
 │   ├── package.json                # Node.js dependencies
 │   └── README.md                   # API documentation
 ├── task-management-client/         # React frontend
@@ -265,7 +265,7 @@ MongoDB data is persisted in a Docker volume. To reset the database:
 docker-compose down
 
 # Remove the volume (⚠️ This will delete all data)
-docker volume rm aspirenodereact_mongodb_data
+docker volume rm nodewithreactindockercompose_mongodb_data
 
 # Start services again
 docker-compose up -d
