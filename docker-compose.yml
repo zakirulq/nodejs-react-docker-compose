@@ -1,0 +1,57 @@
+services:
+  # MongoDB Database
+  mongodb:
+    image: mongo:7.0
+    container_name: task-management-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_DATABASE=taskdb
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - task-management-network
+
+  # Node.js API
+  api:
+    build:
+      context: ./task-management-api
+      dockerfile: Dockerfile
+    container_name: task-management-api
+    restart: unless-stopped
+    ports:
+      - "5469:5469"
+    environment:
+      - NODE_ENV=production
+      - PORT=5469
+      - MONGODB_URI=mongodb://mongodb:27017
+      - DB_NAME=taskdb
+    depends_on:
+      - mongodb
+    networks:
+      - task-management-network
+
+  # React Frontend
+  frontend:
+    build:
+      context: ./task-management-client
+      dockerfile: Dockerfile
+    container_name: task-management-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_API_BASE_URL=http://localhost:5469
+      - CHOKIDAR_USEPOLLING=true
+    depends_on:
+      - api
+    networks:
+      - task-management-network
+
+volumes:
+  mongodb_data:
+
+networks:
+  task-management-network:
+    driver: bridge 
